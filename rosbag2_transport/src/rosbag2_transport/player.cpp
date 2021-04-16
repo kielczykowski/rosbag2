@@ -134,6 +134,24 @@ Player::Player(
     {
       response->paused = is_paused();
     });
+  srv_get_rate_ = create_service<rosbag2_interfaces::srv::GetRate>(
+    "~/get_rate",
+    [this](
+      const std::shared_ptr<rmw_request_id_t>/* request_header */,
+      const std::shared_ptr<rosbag2_interfaces::srv::GetRate::Request>/* request */,
+      const std::shared_ptr<rosbag2_interfaces::srv::GetRate::Response> response)
+    {
+      response->rate = get_rate();
+    });
+  srv_set_rate_ = create_service<rosbag2_interfaces::srv::SetRate>(
+    "~/set_rate",
+    [this](
+      const std::shared_ptr<rmw_request_id_t>/* request_header */,
+      const std::shared_ptr<rosbag2_interfaces::srv::SetRate::Request> request,
+      const std::shared_ptr<rosbag2_interfaces::srv::SetRate::Response>/* response */)
+    {
+      set_rate(request->rate);
+    });
 }
 
 Player::~Player()
@@ -206,12 +224,30 @@ void Player::toggle_paused()
   }
 }
 
-bool Player::is_paused()
+bool Player::is_paused() const
 {
   if (clock_) {
     return clock_->is_paused();
   }
   return true;
+}
+
+double Player::get_rate() const
+{
+  if (clock_) {
+    return clock_->get_rate();
+  }
+  return 0.;
+}
+
+void Player::set_rate(double rate)
+{
+  RCLCPP_WARN(
+    get_logger(),
+    "Setting rate to %lf", rate);
+  if (clock_) {
+    clock_->set_rate(rate);
+  }
 }
 
 void Player::wait_for_filled_queue() const
@@ -317,6 +353,10 @@ void Player::prepare_publishers()
 
 void Player::prepare_clock(rcutils_time_point_value_t starting_time)
 {
+  // Don't create a new clock and lose all its state, on a second play() call such as when looping
+  if (clock_) {
+    return;
+  }
   double rate = play_options_.rate > 0.0 ? play_options_.rate : 1.0;
   clock_ = std::make_unique<rosbag2_cpp::TimeControllerClock>(starting_time, rate);
 
