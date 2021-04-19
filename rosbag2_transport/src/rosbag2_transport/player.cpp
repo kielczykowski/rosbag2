@@ -353,12 +353,17 @@ void Player::prepare_publishers()
 
 void Player::prepare_clock(rcutils_time_point_value_t starting_time)
 {
-  // Don't create a new clock and lose all its state, on a second play() call such as when looping
-  if (clock_) {
-    return;
-  }
   double rate = play_options_.rate > 0.0 ? play_options_.rate : 1.0;
+  bool paused = false;
+  // Copy over important settings
+  if (clock_) {
+    rate = clock_->get_rate();
+    paused = clock_->is_paused();
+  }
   clock_ = std::make_unique<rosbag2_cpp::TimeControllerClock>(starting_time, rate);
+  if (paused) {
+    clock_->pause();
+  }
 
   // Create /clock publisher
   if (play_options_.clock_publish_frequency > 0.f) {
